@@ -18,7 +18,15 @@ final class MusicLibrary: ObservableObject {
     }
 
     var albums: [Album] {
-        let groups = Dictionary(grouping: tracks) { "\($0.albumArtist.isEmpty ? $0.artist : $0.albumArtist)|\($0.album)" }
+        // I tag artista/album possono variare tra le tracce dello stesso disco.
+        // La cartella dell'album è il riferimento stabile; il titolo normalizzato
+        // evita differenze dovute a spazi o maiuscole.
+        let groups = Dictionary(grouping: tracks) { track in
+            let folder = track.url.deletingLastPathComponent().standardizedFileURL.path
+            let normalizedAlbum = track.album.trimmingCharacters(in: .whitespacesAndNewlines)
+                .folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            return "\(folder)|\(normalizedAlbum)"
+        }
         return groups.values.compactMap { group in
             guard let first = group.first else { return nil }
             return Album(title: first.album, artist: first.albumArtist.isEmpty ? first.artist : first.albumArtist,
@@ -96,7 +104,14 @@ final class MusicLibrary: ObservableObject {
                 }
             }
             await MainActor.run {
-                self?.tracks = found.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+                // Evita doppioni se la stessa cartella è stata aggiunta da più radici.
+                let uniqueTracks = Dictionary(grouping: found, by: { $0.url.standardizedFileURL })
+                    .compactMap { $0.value.first }
+                self?.tracks = uniqueTracks.sorted {
+                    let albumOrder = $0.album.localizedStandardCompare($1.album)
+                    if albumOrder != .orderedSame { return albumOrder == .orderedAscending }
+                    return $0.title.localizedStandardCompare($1.title) == .orderedAscending
+                }
                 self?.isScanning = false
                 self?.scanMessage = "\(found.count) brani indicizzati"
             }
