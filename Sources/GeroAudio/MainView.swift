@@ -10,6 +10,7 @@ struct MainView: View {
     @State private var ascending = true
     @State private var coverSize: CGFloat = 126
     @State private var showOutput = false
+    @State private var selectedAlbum: Album?
 
     private var visibleTracks: [Track] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -69,7 +70,7 @@ struct MainView: View {
                             ScrollView {
                                 LazyVGrid(columns: [GridItem(.adaptive(minimum: coverSize + 16), spacing: 20)], alignment: .leading, spacing: 22) {
                                     ForEach(visibleAlbums) { album in
-                                        Button { if let first = album.tracks.first { player.play(first) } } label: {
+                                        Button { selectedAlbum = album } label: {
                                             VStack(alignment: .leading, spacing: 5) {
                                                 artwork(album.artwork, size: coverSize)
                                                 Text(album.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
@@ -118,13 +119,20 @@ struct MainView: View {
                     Text(player.currentTrack.map { "\($0.artist) · \($0.album)" } ?? "Gero Audio").font(.system(size: 9)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
                 }.frame(width: 220, alignment: .leading)
                 Spacer()
+                Button { player.previousTrack() } label: { Image(systemName: "backward.end.fill") }.buttonStyle(.plain).help("Traccia precedente")
                 Button { player.togglePlayback() } label: { Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 19)).frame(width: 34, height: 34) }.buttonStyle(.plain)
+                Button { player.nextTrack() } label: { Image(systemName: "forward.end.fill") }.buttonStyle(.plain).help("Traccia successiva")
+                Button { player.stop() } label: { Image(systemName: "stop.fill") }.buttonStyle(.plain).help("Stop")
                 Text(time(player.elapsed)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
-                ProgressView(value: player.currentTrack.map { $0.duration > 0 ? player.elapsed / $0.duration : 0 } ?? 0).tint(.cyan).frame(maxWidth: 260)
+                Slider(value: Binding(get: { player.elapsed }, set: { player.seek(to: $0) }), in: 0...max(1, player.currentTrack?.duration ?? 1)).tint(.cyan).frame(maxWidth: 260).disabled(player.currentTrack == nil || (player.currentTrack?.duration ?? 0) <= 0)
                 Text(player.currentTrack.map { time(max(0, $0.duration - player.elapsed)) } ?? "0:00").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
                 Slider(value: $player.volume, in: 0...1).frame(width: 85)
             }.padding(.horizontal, 20).frame(height: 78).background(Color(red: 0.02, green: 0.03, blue: 0.07))
         }.background(Color(red: 0.035, green: 0.05, blue: 0.105)).onAppear { player.refreshOutputs() }
+        .sheet(item: $selectedAlbum) { album in
+            AlbumDetailView(album: album) { track in player.play(track, queue: album.tracks) }
+                .frame(minWidth: 520, minHeight: 480)
+        }
     }
 
     private var outputPanel: some View {
