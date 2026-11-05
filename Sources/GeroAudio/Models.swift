@@ -6,6 +6,7 @@ struct Track: Identifiable, Hashable {
     let url: URL
     var startTime: TimeInterval = 0
     var endTime: TimeInterval? = nil
+    var trackNumber: Int? = nil
     var title: String
     var artist: String
     var album: String
@@ -18,7 +19,7 @@ struct Track: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 struct Album: Identifiable, Hashable {
-    var id: String { "\(artist)|\(title)" }
+    var id: String { tracks.first?.url.deletingLastPathComponent().standardizedFileURL.path ?? "\(artist)|\(title)" }
     let title: String
     let artist: String
     let year: Int?
