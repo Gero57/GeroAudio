@@ -17,9 +17,22 @@ final class AudioPlayer: ObservableObject {
     @Published private(set) var outputs: [AudioOutput] = []
     @Published var selectedOutputID: AudioDeviceID?
     @Published var volume: Double = UserDefaults.standard.object(forKey: "GeroAudio.volume") as? Double ?? 0.0 { didSet { playerNode.volume = Float(volume); UserDefaults.standard.set(volume, forKey: "GeroAudio.volume") } }
+    private let eqFrequencies: [Float] = [31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000]
+    @Published var eqEnabled: Bool = UserDefaults.standard.object(forKey: "GeroAudio.eqEnabled") as? Bool ?? false {
+        didSet { applyEQ(); UserDefaults.standard.set(eqEnabled, forKey: "GeroAudio.eqEnabled") }
+    }
+    @Published var eqGains: [Double] = (0..<10).map { UserDefaults.standard.double(forKey: "GeroAudio.eqGain.\($0)") } {
+        didSet {
+            applyEQ()
+            for index in 0..<min(eqGains.count, 10) {
+                UserDefaults.standard.set(eqGains[index], forKey: "GeroAudio.eqGain.\(index)")
+            }
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
+    private let equalizer = AVAudioUnitEQ(numberOfBands: 10)
     private var timer: Timer?
     private var currentFile: AVAudioFile?
     private var queue: [Track] = []
@@ -29,9 +42,38 @@ final class AudioPlayer: ObservableObject {
 
     init() {
         engine.attach(playerNode)
-        engine.connect(playerNode, to: engine.mainMixerNode, format: nil)
+        engine.attach(equalizer)
+        engine.connect(playerNode, to: equalizer, format: nil)
+        engine.connect(equalizer, to: engine.mainMixerNode, format: nil)
+        equalizer.globalGain = 0
+        for (index, band) in equalizer.bands.enumerated() {
+            band.filterType = .parametric
+            band.frequency = eqFrequencies[index]
+            band.bandwidth = 1.0
+            band.gain = Float(eqGains[index])
+            band.bypass = !eqEnabled
+        }
         playerNode.volume = Float(volume)
         refreshOutputs()
+    }
+
+    func setEQGain(_ gain: Double, for index: Int) {
+        guard eqGains.indices.contains(index) else { return }
+        var updated = eqGains
+        updated[index] = min(12, max(-12, gain))
+        eqGains = updated
+    }
+
+    func resetEQ() {
+        eqGains = Array(repeating: 0, count: 10)
+    }
+
+    private func applyEQ() {
+        guard equalizer.bands.count == 10 else { return }
+        for index in 0..<10 {
+            equalizer.bands[index].gain = Float(eqGains[index])
+            equalizer.bands[index].bypass = !eqEnabled
+        }
     }
 
     func refreshOutputs() {
