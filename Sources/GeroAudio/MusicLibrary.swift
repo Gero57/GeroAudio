@@ -67,7 +67,7 @@ final class MusicLibrary: ObservableObject {
                     let audio = try? AVAudioFile(forReading: url)
                     let duration = audio.map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
                     var artwork: NSImage?
-                    if let item = AVMetadataItem.metadataItems(from: metadata, withKey: .commonKeyArtwork, keySpace: .common).first,
+                    if let item = metadata.first(where: { $0.commonKey == AVMetadataKey.commonKeyArtwork }),
                        let data = item.dataValue { artwork = NSImage(data: data) }
                     found.append(Track(id: url, url: url, title: title, artist: artist, album: album,
                                        albumArtist: artist, year: year, duration: duration, artwork: artwork))
