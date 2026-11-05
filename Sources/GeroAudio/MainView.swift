@@ -204,6 +204,8 @@ struct MainView: View {
         }.background(Color(red: 0.035, green: 0.05, blue: 0.105))
         .onAppear { player.refreshOutputs() }
         .onReceive(NotificationCenter.default.publisher(for: .geroAudioSpacebarPlayback)) { _ in player.togglePlayback() }
+        .onReceive(NotificationCenter.default.publisher(for: .geroAudioPreviousTrack)) { _ in _ = player.previousTrack() }
+        .onReceive(NotificationCenter.default.publisher(for: .geroAudioNextTrack)) { _ in _ = player.nextTrack() }
         .alert("Nuova playlist", isPresented: $showPlaylistAlert) {
             TextField("Nome playlist", text: $newPlaylistName)
             Button("Annulla", role: .cancel) {}
