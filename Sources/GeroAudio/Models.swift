@@ -2,8 +2,10 @@ import Foundation
 import AppKit
 
 struct Track: Identifiable, Hashable {
-    let id: URL
+    let id: String
     let url: URL
+    var startTime: TimeInterval = 0
+    var endTime: TimeInterval? = nil
     var title: String
     var artist: String
     var album: String
@@ -12,8 +14,8 @@ struct Track: Identifiable, Hashable {
     var duration: TimeInterval
     var artwork: NSImage?
     var fileType: String { url.pathExtension.uppercased() }
-    static func == (lhs: Track, rhs: Track) -> Bool { lhs.url == rhs.url }
-    func hash(into hasher: inout Hasher) { hasher.combine(url) }
+    static func == (lhs: Track, rhs: Track) -> Bool { lhs.id == rhs.id }
+    func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 struct Album: Identifiable, Hashable {
     var id: String { "\(artist)|\(title)" }
