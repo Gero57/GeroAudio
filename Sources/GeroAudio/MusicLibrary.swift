@@ -239,16 +239,7 @@ private func parseCueFile(_ cueURL: URL) -> [Track] {
     let totalDuration = Double(audio.length) / audio.processingFormat.sampleRate
     let folderURL = audioURL.deletingLastPathComponent()
     let parentArtist = albumArtist.isEmpty ? folderURL.deletingLastPathComponent().lastPathComponent : albumArtist
-    var artwork: NSImage?
-    for name in ["cover", "folder", "front", "album", "artwork"] {
-        for ext in ["jpg", "jpeg", "png", "tif", "tiff"] {
-            if let image = NSImage(contentsOf: folderURL.appendingPathComponent(name).appendingPathExtension(ext)) {
-                artwork = image
-                break
-            }
-        }
-        if artwork != nil { break }
-    }
+    let artwork = findArtwork(in: folderURL)
     return entries.enumerated().compactMap { index, entry in
         let end = index + 1 < entries.count ? entries[index + 1].seconds : totalDuration
         guard end > entry.seconds else { return nil }
@@ -257,5 +248,95 @@ private func parseCueFile(_ cueURL: URL) -> [Track] {
                      title: entry.title, artist: entry.artist.isEmpty ? parentArtist : entry.artist,
                      album: albumTitle, albumArtist: parentArtist,
                      year: nil, duration: end - entry.seconds, artwork: artwork)
+    }
+}
+
+
+private func findArtwork(in folder: URL) -> NSImage? {
+    let imageExtensions = Set(["jpg", "jpeg", "png", "tif", "tiff", "webp", "bmp"])
+    let preferredNames = ["cover", "folder", "front", "album", "artwork"]
+    let files = (try? FileManager.default.contentsOfDirectory(at: folder,
+        includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])) ?? []
+    let images = files.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+    let ordered = images.sorted { left, right in
+        let leftName = left.deletingPathExtension().lastPathComponent.lowercased()
+        let rightName = right.deletingPathExtension().lastPathComponent.lowercased()
+        let leftRank = preferredNames.firstIndex(of: leftName) ?? preferredNames.count
+        let rightRank = preferredNames.firstIndex(of: rightName) ?? preferredNames.count
+        if leftRank != rightRank { return leftRank < rightRank }
+        return left.lastPathComponent.localizedStandardCompare(right.lastPathComponent) == .orderedAscending
+    }
+    for url in ordered {
+        if let image = NSImage(contentsOf: url) { return image }
+    }
+    return nil
+}
+
+private func parseEmbeddedFlacCue(_ url: URL) -> [Track] {
+    guard let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+    defer { try? handle.close() }
+    guard let signature = try? handle.read(upToCount: 4), signature == Data("fLaC".utf8) else { return [] }
+
+    var cueBlock: Data?
+    while true {
+        guard let header = try? handle.read(upToCount: 4), header.count == 4 else { break }
+        let isLast = (header[0] & 0x80) != 0
+        let type = header[0] & 0x7F
+        let length = (Int(header[1]) << 16) | (Int(header[2]) << 8) | Int(header[3])
+        if type == 5 {
+            cueBlock = try? handle.read(upToCount: length)
+            break
+        }
+        let offset = (try? handle.offset()) ?? 0
+        try? handle.seek(toOffset: offset + UInt64(length))
+        if isLast { break }
+    }
+    guard let data = cueBlock, data.count >= 396 else { return [] }
+
+    func uint(_ offset: Int, _ count: Int) -> UInt64? {
+        guard offset >= 0, count > 0, offset + count <= data.count else { return nil }
+        var value: UInt64 = 0
+        for index in offset..<(offset + count) { value = (value << 8) | UInt64(data[index]) }
+        return value
+    }
+
+    guard let countValue = uint(395, 1), let audio = try? AVAudioFile(forReading: url) else { return [] }
+    let sampleRate = audio.processingFormat.sampleRate
+    let totalDuration = Double(audio.length) / sampleRate
+    let trackCount = Int(countValue)
+    var cursor = 396
+    var entries: [(number: Int, start: TimeInterval)] = []
+
+    for _ in 0..<trackCount {
+        guard let sampleOffset = uint(cursor, 8),
+              let number = uint(cursor + 8, 1),
+              let indexCount = uint(cursor + 22, 1) else { return [] }
+        let indexBase = cursor + 23
+        var indexOneOffset: UInt64 = 0
+        for index in 0..<Int(indexCount) {
+            guard let offset = uint(indexBase + index * 12, 8),
+                  let indexNumber = uint(indexBase + index * 12 + 8, 1) else { return [] }
+            if indexNumber == 1 { indexOneOffset = offset }
+        }
+        if number != 170 {
+            entries.append((Int(number), Double(sampleOffset + indexOneOffset) / sampleRate))
+        }
+        cursor = indexBase + Int(indexCount) * 12
+        if cursor > data.count { return [] }
+    }
+
+    guard !entries.isEmpty else { return [] }
+    let folder = url.deletingLastPathComponent()
+    let albumTitle = folder.lastPathComponent
+    let artist = folder.deletingLastPathComponent().lastPathComponent
+    let artwork = findArtwork(in: folder)
+    return entries.enumerated().compactMap { index, entry in
+        let end = index + 1 < entries.count ? entries[index + 1].start : totalDuration
+        guard end > entry.start, entry.start < totalDuration else { return nil }
+        return Track(id: "\(url.path)#embedded-cue-\(entry.number)", url: url,
+                     startTime: entry.start, endTime: end, trackNumber: entry.number,
+                     title: String(format: "Traccia %02d", entry.number),
+                     artist: artist, album: albumTitle, albumArtist: artist,
+                     year: nil, duration: end - entry.start, artwork: artwork)
     }
 }
