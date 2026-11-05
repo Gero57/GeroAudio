@@ -166,11 +166,17 @@ struct MainView: View {
                             ScrollView {
                                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 18)], spacing: 22) {
                                     ForEach(Array(Set(visibleTracks.map(\.artist))).sorted(), id: \.self) { artist in
-                                        Button { query = artist; tab = .albums } label: {
+                                        Button { query = artist; tab = .albums; selectedPlaylist = nil } label: {
                                             VStack(spacing: 10) {
-                                                Image(systemName: "person.crop.circle.fill").font(.system(size: 66)).foregroundStyle(.white.opacity(0.5))
-                                                Text(artist).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white)
-                                            }
+                                                if let image = artistArtwork(for: artist) {
+                                                    Image(nsImage: image).resizable().aspectRatio(contentMode: .fill)
+                                                        .frame(width: 76, height: 76).clipShape(Circle())
+                                                        .overlay(Circle().stroke(.white.opacity(0.12), lineWidth: 1))
+                                                } else {
+                                                    Image(systemName: "person.crop.circle.fill").font(.system(size: 66)).foregroundStyle(.white.opacity(0.5))
+                                                }
+                                                Text(artist).font(.system(size: 11 * fontScale, weight: .semibold)).foregroundStyle(.white)
+                                            }.frame(width: 150)
                                         }.buttonStyle(.plain)
                                     }
                                 }.padding(24)
@@ -197,6 +203,7 @@ struct MainView: View {
             }.padding(.horizontal, 20).frame(height: 78).background(Color(red: 0.02, green: 0.03, blue: 0.07))
         }.background(Color(red: 0.035, green: 0.05, blue: 0.105))
         .onAppear { player.refreshOutputs() }
+        .onReceive(NotificationCenter.default.publisher(for: .geroAudioSpacebarPlayback)) { _ in player.togglePlayback() }
         .alert("Nuova playlist", isPresented: $showPlaylistAlert) {
             TextField("Nome playlist", text: $newPlaylistName)
             Button("Annulla", role: .cancel) {}
@@ -216,6 +223,10 @@ struct MainView: View {
             Text("La selezione dell'uscita è gestita da Gero Audio, senza modificare l'uscita predefinita di macOS.").font(.system(size: 10)).foregroundStyle(.secondary)
         }
     }
+    private func artistArtwork(for artist: String) -> NSImage? {
+        library.albums.first(where: { $0.artist.localizedCaseInsensitiveCompare(artist) == .orderedSame && $0.artwork != nil })?.artwork
+    }
+
     private func artwork(_ image: NSImage?, size: CGFloat) -> some View {
         Group {
             if let image { Image(nsImage: image).resizable().aspectRatio(contentMode: .fill) }
