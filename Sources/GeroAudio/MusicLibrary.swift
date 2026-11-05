@@ -32,7 +32,10 @@ final class MusicLibrary: ObservableObject {
             guard let first = group.first else { return nil }
             return Album(title: first.album, artist: first.albumArtist.isEmpty ? first.artist : first.albumArtist,
                          year: first.year, artwork: group.compactMap(\.artwork).first,
-                         tracks: group.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
+                         tracks: group.sorted { left, right in
+                             if left.url == right.url && left.startTime != right.startTime { return left.startTime < right.startTime }
+                             return left.title.localizedStandardCompare(right.title) == .orderedAscending
+                         })
         }
     }
 
