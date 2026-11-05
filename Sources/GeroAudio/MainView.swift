@@ -260,7 +260,7 @@ struct MainView: View {
                     VStack(spacing: 5) {
                         Text(String(format: "%+.0f", player.eqGains[index]))
                             .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(player.eqGains[index] == 0 ? .secondary : .cyan)
+                            .foregroundStyle(player.eqGains[index] == 0 ? Color.secondary : Color.cyan)
                             .frame(height: 13)
                         Slider(value: Binding(
                             get: { player.eqGains[index] },
