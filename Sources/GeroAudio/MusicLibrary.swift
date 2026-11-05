@@ -102,6 +102,13 @@ final class MusicLibrary: ObservableObject {
                 for url in fileURLs {
                     guard extensions.contains(url.pathExtension.lowercased()),
                           !cueReferencedAudio.contains(url.standardizedFileURL) else { continue }
+                    if url.pathExtension.lowercased() == "flac" {
+                        let embeddedCueTracks = parseEmbeddedFlacCue(url)
+                        if !embeddedCueTracks.isEmpty {
+                            found.append(contentsOf: embeddedCueTracks)
+                            continue
+                        }
+                    }
                     let asset = AVURLAsset(url: url)
                     let metadata = asset.commonMetadata
                     let allMetadata = asset.metadata + metadata
