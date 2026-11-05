@@ -11,6 +11,9 @@ struct MainView: View {
     @State private var coverSize: CGFloat = 126
     @AppStorage("GeroAudio.fontScale") private var fontScale: Double = 1.0
     @State private var showOutput = false
+    @State private var showSources = false
+    @State private var showRemoveFolderConfirmation = false
+    @State private var folderPendingRemoval: URL?
     @State private var showEQ = false
     private let eqBandLabels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
     @State private var selectedAlbum: Album?
@@ -93,6 +96,7 @@ struct MainView: View {
                     }
                     Spacer()
                     Button { library.chooseFolder() } label: { Label("Aggiungi cartella", systemImage: "folder.badge.plus").font(.system(size: 11)) }.buttonStyle(.plain).foregroundStyle(.white.opacity(0.75))
+                    Button { showSources = true } label: { Label("Gestisci cartelle", systemImage: "folder.badge.gearshape").font(.system(size: 11)) }.buttonStyle(.plain).foregroundStyle(.white.opacity(0.75))
                 }.padding(18).frame(width: 176, alignment: .leading).frame(maxHeight: .infinity).background(Color(red: 0.075, green: 0.105, blue: 0.18))
                 VStack(spacing: 0) {
                     HStack {
@@ -230,6 +234,57 @@ struct MainView: View {
         .onAppear {
             player.refreshOutputs()
             keyboardFocus = true
+        }
+        .sheet(isPresented: $showSources) {
+            VStack(alignment: .leading, spacing: 16) {
+                HStack {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("CARTELLE MUSICALI").font(.system(size: 16, weight: .bold)).foregroundStyle(.white)
+                        Text("Gestisci le cartelle che compongono la tua libreria").font(.system(size: 11)).foregroundStyle(.white.opacity(0.6))
+                    }
+                    Spacer()
+                    Button { library.chooseFolder() } label: { Label("Aggiungi cartella…", systemImage: "plus") }
+                        .buttonStyle(.borderedProminent).tint(.cyan)
+                }
+                if library.rootURLs.isEmpty {
+                    ContentUnavailableView("Nessuna cartella", systemImage: "folder", description: Text("Aggiungi una cartella per caricare la tua musica."))
+                } else {
+                    List {
+                        ForEach(library.rootURLs, id: \.standardizedFileURL.path) { url in
+                            HStack(spacing: 12) {
+                                Image(systemName: "folder.fill").font(.system(size: 22)).foregroundStyle(.cyan)
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(url.lastPathComponent).font(.system(size: 13, weight: .semibold)).foregroundStyle(.white)
+                                    Text(url.path).font(.system(size: 10)).foregroundStyle(.white.opacity(0.5)).lineLimit(1).truncationMode(.middle)
+                                }
+                                Spacer()
+                                Button(role: .destructive) {
+                                    folderPendingRemoval = url
+                                    showRemoveFolderConfirmation = true
+                                } label: { Image(systemName: "minus.circle").font(.system(size: 17)) }
+                                .buttonStyle(.plain).help("Rimuovi questa cartella dalla libreria")
+                            }.padding(.vertical, 5).listRowBackground(Color.white.opacity(0.04))
+                        }
+                    }.scrollContentBackground(.hidden)
+                }
+                HStack {
+                    Text("Rimuovere una cartella non cancella i file originali dal disco.").font(.system(size: 10)).foregroundStyle(.white.opacity(0.55))
+                    Spacer()
+                    Button("Chiudi") { showSources = false }.keyboardShortcut(.defaultAction)
+                }
+            }
+            .padding(20).frame(minWidth: 560, minHeight: 360)
+            .background(Color(red: 0.045, green: 0.065, blue: 0.12))
+            .preferredColorScheme(.dark)
+            .confirmationDialog("Rimuovere questa cartella dalla libreria?", isPresented: $showRemoveFolderConfirmation, titleVisibility: .visible) {
+                Button("Rimuovi dalla libreria", role: .destructive) {
+                    if let url = folderPendingRemoval { library.removeFolder(url) }
+                    folderPendingRemoval = nil
+                }
+                Button("Annulla", role: .cancel) { folderPendingRemoval = nil }
+            } message: {
+                Text("I file originali resteranno sul disco. Verranno rimossi dalla libreria solo i brani provenienti da questa cartella.")
+            }
         }
         .alert("Nuova playlist", isPresented: $showPlaylistAlert) {
             TextField("Nome playlist", text: $newPlaylistName)
