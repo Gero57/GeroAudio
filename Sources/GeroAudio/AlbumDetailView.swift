@@ -3,6 +3,8 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     var fontScale: Double = 1.0
+    var currentTrackID: String? = nil
+    var isPlaying: Bool = false
     let onPlay: (Track) -> Void
     let onBack: () -> Void
 
@@ -75,7 +77,17 @@ struct AlbumDetailView: View {
                 LazyVStack(spacing: 0) {
                     ForEach(Array(album.tracks.enumerated()), id: \.element.id) { index, track in
                         Button { onPlay(track) } label: {
-                            HStack(spacing: 12) {
+                            HStack(spacing: 8) {
+                                Group {
+                                    if currentTrackID == track.id {
+                                        Image(systemName: isPlaying ? "speaker.wave.2.fill" : "pause.fill")
+                                            .font(.system(size: 11, weight: .bold))
+                                            .foregroundStyle(accentBlue)
+                                    } else {
+                                        Color.clear
+                                    }
+                                }
+                                .frame(width: 16)
                                 Text(String(index + 1))
                                     .frame(width: 38, alignment: .trailing)
                                     .foregroundStyle(Color.white.opacity(0.58))
