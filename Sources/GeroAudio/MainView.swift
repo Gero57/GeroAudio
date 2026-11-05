@@ -59,12 +59,10 @@ struct MainView: View {
                     TextField("Cerca brani, album, artisti…", text: $query).textFieldStyle(.plain)
                 }.padding(10).background(Color.white.opacity(0.07)).clipShape(Capsule()).frame(maxWidth: 480)
                 Spacer()
-                Button { showEQ.toggle() } label: {
+                Button { EqualizerWindowManager.shared.show(player: player) } label: {
                     Image(systemName: "slider.vertical.3").font(.system(size: 17))
                         .foregroundStyle(player.eqEnabled ? Color.cyan : Color.white.opacity(0.85))
-                }.buttonStyle(.plain).help("Equalizzatore").popover(isPresented: $showEQ) {
-                    equalizerPanel.padding(18).frame(width: 540, height: 245)
-                }
+                }.buttonStyle(.plain).help("Apri equalizzatore")
                 Button { showOutput.toggle() } label: { Image(systemName: "hifispeaker").font(.system(size: 17)) }.buttonStyle(.plain).popover(isPresented: $showOutput) { outputPanel.padding(16).frame(width: 300) }
             }.padding(.horizontal, 22).frame(height: 62).background(Color(red: 0.11, green: 0.15, blue: 0.25))
             HStack(spacing: 0) {
@@ -242,53 +240,6 @@ struct MainView: View {
         }
     }
 
-    private var equalizerPanel: some View {
-        VStack(spacing: 12) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("GERO AUDIO").font(.system(size: 10, weight: .bold)).foregroundStyle(.cyan)
-                    Text("EQUALIZER · 10 BANDE").font(.system(size: 14, weight: .semibold))
-                }
-                Spacer()
-                Toggle("EQ ON", isOn: $player.eqEnabled).toggleStyle(.switch).labelsHidden()
-                Text(player.eqEnabled ? "ON" : "BYPASS")
-                    .font(.system(size: 9, weight: .bold)).foregroundStyle(player.eqEnabled ? .cyan : .secondary)
-                Button("Reset") { player.resetEQ() }.buttonStyle(.bordered).controlSize(.small)
-            }
-            HStack(alignment: .center, spacing: 7) {
-                ForEach(0..<10, id: \.self) { index in
-                    VStack(spacing: 5) {
-                        Text(String(format: "%+.0f", player.eqGains[index]))
-                            .font(.system(size: 9, design: .monospaced))
-                            .foregroundStyle(player.eqGains[index] == 0 ? Color.secondary : Color.cyan)
-                            .frame(height: 13)
-                        Slider(value: Binding(
-                            get: { player.eqGains[index] },
-                            set: { player.setEQGain($0, for: index) }
-                        ), in: -12...12, step: 1)
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 112, height: 22)
-                        .frame(width: 25, height: 112)
-                        Text(eqBandLabels[index])
-                            .font(.system(size: 9, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.75))
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-            }
-            HStack {
-                Text("−12 dB").font(.system(size: 9)).foregroundStyle(.secondary)
-                Spacer()
-                Text("0 dB").font(.system(size: 9)).foregroundStyle(.secondary)
-                Spacer()
-                Text("+12 dB").font(.system(size: 9)).foregroundStyle(.secondary)
-            }
-        }
-        .foregroundStyle(.white)
-        .padding(4)
-        .preferredColorScheme(.dark)
-    }
-
     private var outputPanel: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("USCITA AUDIO").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
@@ -316,3 +267,123 @@ struct MainView: View {
 }
 
 
+
+
+@MainActor
+private final class EqualizerWindowManager {
+    static let shared = EqualizerWindowManager()
+    private var panel: NSPanel?
+
+    func show(player: AudioPlayer) {
+        if let panel, panel.isVisible {
+            panel.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return
+        }
+        let newPanel = NSPanel(
+            contentRect: NSRect(x: 0, y: 0, width: 690, height: 360),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            backing: .buffered, defer: false
+        )
+        newPanel.title = "Gero Audio — Equalizer"
+        newPanel.isFloatingPanel = true
+        newPanel.level = .floating
+        newPanel.isReleasedWhenClosed = false
+        newPanel.minSize = NSSize(width: 620, height: 330)
+        newPanel.contentView = NSHostingView(rootView: EqualizerWindowView(player: player))
+        newPanel.center()
+        self.panel = newPanel
+        newPanel.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+}
+
+private struct EqualizerWindowView: View {
+    @ObservedObject var player: AudioPlayer
+    @State private var presetName = ""
+    @State private var selectedPreset = ""
+    @State private var showSavePreset = false
+    private let labels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
+
+    var body: some View {
+        VStack(spacing: 18) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("GERO AUDIO").font(.system(size: 10, weight: .bold)).foregroundStyle(.cyan)
+                    Text("EQUALIZER · 10 BANDE").font(.system(size: 17, weight: .semibold))
+                }
+                Spacer()
+                Toggle("EQ ON", isOn: $player.eqEnabled).toggleStyle(.switch).labelsHidden()
+                Text(player.eqEnabled ? "ATTIVO" : "BYPASS")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundStyle(player.eqEnabled ? Color.cyan : Color.secondary)
+                Button("Reset") { player.resetEQ(); selectedPreset = "" }.buttonStyle(.bordered).controlSize(.small)
+            }
+            HStack(alignment: .center, spacing: 12) {
+                ForEach(0..<10, id: \.self) { index in
+                    VStack(spacing: 8) {
+                        Text(String(format: "%+.0f dB", player.eqGains[index]))
+                            .font(.system(size: 10, design: .monospaced))
+                            .foregroundStyle(player.eqGains[index] == 0 ? Color.secondary : Color.cyan)
+                            .frame(height: 15)
+                        Slider(value: Binding(
+                            get: { player.eqGains[index] },
+                            set: { player.setEQGain($0, for: index); selectedPreset = "" }
+                        ), in: -12...12, step: 1)
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 130, height: 24)
+                        .frame(width: 28, height: 130)
+                        Text(labels[index]).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            HStack {
+                Text("−12 dB").font(.system(size: 10)).foregroundStyle(.secondary)
+                Spacer()
+                Text("0 dB").font(.system(size: 10)).foregroundStyle(.secondary)
+                Spacer()
+                Text("+12 dB").font(.system(size: 10)).foregroundStyle(.secondary)
+            }
+            Divider().overlay(.white.opacity(0.12))
+            HStack(spacing: 10) {
+                Text("PRESET").font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
+                Menu {
+                    Button("Flat (reset)") { player.resetEQ(); selectedPreset = "" }
+                    if !player.eqPresets.isEmpty {
+                        Divider()
+                        ForEach(player.eqPresets.keys.sorted(), id: \.self) { name in
+                            Button(name) { player.applyEQPreset(named: name); selectedPreset = name }
+                        }
+                    }
+                } label: {
+                    Label(selectedPreset.isEmpty ? "Seleziona preset" : selectedPreset, systemImage: "slider.horizontal.3")
+                        .frame(minWidth: 150, alignment: .leading)
+                }
+                Button("Salva preset…") { presetName = ""; showSavePreset = true }
+                    .buttonStyle(.borderedProminent).tint(Color(red: 0.18, green: 0.30, blue: 0.58))
+                if !selectedPreset.isEmpty {
+                    Button(role: .destructive) {
+                        player.deleteEQPreset(named: selectedPreset); selectedPreset = ""
+                    } label: { Image(systemName: "trash") }
+                    .help("Elimina preset selezionato")
+                }
+                Spacer()
+            }
+        }
+        .padding(22)
+        .foregroundStyle(.white)
+        .background(Color(red: 0.075, green: 0.105, blue: 0.18))
+        .preferredColorScheme(.dark)
+        .alert("Salva preset equalizzatore", isPresented: $showSavePreset) {
+            TextField("Nome preset", text: $presetName)
+            Button("Annulla", role: .cancel) {}
+            Button("Salva") {
+                player.saveEQPreset(named: presetName)
+                selectedPreset = presetName.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        } message: {
+            Text("Salva la regolazione attuale per richiamarla in qualsiasi momento.")
+        }
+    }
+}
