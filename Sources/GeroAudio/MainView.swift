@@ -15,6 +15,7 @@ struct MainView: View {
     @State private var selectedPlaylist: String?
     @State private var showPlaylistAlert = false
     @State private var newPlaylistName = ""
+    @FocusState private var keyboardFocus: Bool
 
     private var visibleTracks: [Track] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -149,7 +150,7 @@ struct MainView: View {
                             }
                         } else if tab == .tracks {
                             List(Array(visibleTracks.enumerated()), id: \.element.id) { index, track in
-                                Button { player.play(track) } label: {
+                                Button { player.play(track, queue: visibleTracks) } label: {
                                     HStack(spacing: 12) {
                                         Text(String(format: "%02d", index + 1)).foregroundStyle(.secondary).frame(width: 28)
                                         VStack(alignment: .leading, spacing: 3) {
@@ -201,11 +202,29 @@ struct MainView: View {
                 Text(player.currentTrack.map { time(max(0, $0.duration - player.elapsed)) } ?? "0:00").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
                 Slider(value: $player.volume, in: 0...1).frame(width: 85)
             }.padding(.horizontal, 20).frame(height: 78).background(Color(red: 0.02, green: 0.03, blue: 0.07))
-        }.background(Color(red: 0.035, green: 0.05, blue: 0.105))
-        .onAppear { player.refreshOutputs() }
-        .onReceive(NotificationCenter.default.publisher(for: .geroAudioSpacebarPlayback)) { _ in player.togglePlayback() }
-        .onReceive(NotificationCenter.default.publisher(for: .geroAudioPreviousTrack)) { _ in _ = player.previousTrack() }
-        .onReceive(NotificationCenter.default.publisher(for: .geroAudioNextTrack)) { _ in _ = player.nextTrack() }
+        }
+        .background(Color(red: 0.035, green: 0.05, blue: 0.105))
+        .focusable()
+        .focused($keyboardFocus)
+        .onKeyPress(keys: [.space, .upArrow, .downArrow]) { press in
+            switch press.key {
+            case .space:
+                player.togglePlayback()
+                return .handled
+            case .upArrow:
+                _ = player.previousTrack()
+                return .handled
+            case .downArrow:
+                _ = player.nextTrack()
+                return .handled
+            default:
+                return .ignored
+            }
+        }
+        .onAppear {
+            player.refreshOutputs()
+            keyboardFocus = true
+        }
         .alert("Nuova playlist", isPresented: $showPlaylistAlert) {
             TextField("Nome playlist", text: $newPlaylistName)
             Button("Annulla", role: .cancel) {}
