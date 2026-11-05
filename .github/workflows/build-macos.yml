@@ -1,0 +1,45 @@
+name: Build Gero Audio for macOS
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          xcodebuild -version
+          swift --version
+
+      - name: Build release executable
+        run: swift build -c release --arch arm64
+
+      - name: Assemble application bundle
+        run: |
+          APP="build/GeroAudio.app"
+          mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+          cp .build/arm64-apple-macosx/release/GeroAudio "$APP/Contents/MacOS/GeroAudio"
+          cp Resources/Info.plist "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable GeroAudio" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier it.gero.GeroAudio" "$APP/Contents/Info.plist"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleName Gero Audio" "$APP/Contents/Info.plist"
+          codesign --force --deep --sign - "$APP"
+          ditto -c -k --sequesterRsrc --keepParent "$APP" GeroAudio-macOS-arm64.zip
+
+      - name: Upload installable app
+        uses: actions/upload-artifact@v4
+        with:
+          name: GeroAudio-macOS-arm64
+          path: GeroAudio-macOS-arm64.zip
+          if-no-files-found: error
+          retention-days: 30
