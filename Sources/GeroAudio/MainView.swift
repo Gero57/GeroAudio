@@ -32,9 +32,17 @@ struct MainView: View {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
         return library.albums.filter { album in
             let matchesQuery = q.isEmpty || album.title.localizedCaseInsensitiveContains(q) || album.artist.localizedCaseInsensitiveContains(q)
-            let matchesPlaylist = selectedPlaylist == nil || library.playlists[selectedPlaylist!]?.contains(album.id) == true
-            return matchesQuery && matchesPlaylist
+            guard matchesQuery else { return false }
+            guard let selectedPlaylist, let items = library.playlists[selectedPlaylist] else { return true }
+            return items.contains(album.id) || album.tracks.contains { items.contains($0.id) }
         }
+            .map { album in
+                guard let selectedPlaylist, let items = library.playlists[selectedPlaylist],
+                      !items.contains(album.id) else { return album }
+                let selectedTracks = album.tracks.filter { items.contains($0.id) }
+                return Album(title: album.title, artist: album.artist, year: album.year,
+                             artwork: album.artwork, tracks: selectedTracks)
+            }
             .sorted { ascending ? $0.title.localizedStandardCompare($1.title) == .orderedAscending : $0.title.localizedStandardCompare($1.title) == .orderedDescending }
     }
 
@@ -105,9 +113,26 @@ struct MainView: View {
                                             }.frame(width: coverSize, alignment: .leading)
                                         }.buttonStyle(.plain)
                                         .contextMenu {
-                                            Menu("Aggiungi alla playlist") {
-                                                ForEach(library.playlists.keys.sorted(), id: \.self) { name in
-                                                    Button(name) { library.addAlbum(album, to: name) }
+                                            Menu("Aggiungi album alla playlist") {
+                                                if library.playlists.isEmpty {
+                                                    Text("Crea prima una playlist")
+                                                } else {
+                                                    ForEach(library.playlists.keys.sorted(), id: \.self) { name in
+                                                        Button(name) { library.addAlbum(album, to: name) }
+                                                    }
+                                                }
+                                            }
+                                            Menu("Aggiungi singoli brani") {
+                                                if library.playlists.isEmpty {
+                                                    Text("Crea prima una playlist")
+                                                } else {
+                                                    ForEach(album.tracks) { track in
+                                                        Menu(track.title) {
+                                                            ForEach(library.playlists.keys.sorted(), id: \.self) { name in
+                                                                Button(name) { library.addTrack(track, to: name) }
+                                                            }
+                                                        }
+                                                    }
                                                 }
                                             }
                                             if let selectedPlaylist {
