@@ -2,6 +2,7 @@ import Foundation
 import AppKit
 import AVFoundation
 import Combine
+import CryptoKit
 
 @MainActor
 final class MusicLibrary: ObservableObject {
@@ -12,10 +13,18 @@ final class MusicLibrary: ObservableObject {
     private let supported = Set(["flac", "wav", "wave", "aif", "aiff", "mp3", "m4a", "aac", "caf"])
     @Published private(set) var playlists: [String: [String]] = UserDefaults.standard.dictionary(forKey: "GeroAudio.playlists") as? [String: [String]] ?? [:]
     private let rootsKey = "GeroAudio.libraryRoots"
+    private let cacheFolder: URL = {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let folder = base.appendingPathComponent("GeroAudio/LibraryCache", isDirectory: true)
+        try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        return folder
+    }()
+    private var cacheFile: URL { cacheFolder.appendingPathComponent("library.json") }
 
     init() {
         rootURLs = (UserDefaults.standard.stringArray(forKey: rootsKey) ?? []).map(URL.init(fileURLWithPath:))
-        if !rootURLs.isEmpty { refresh() }
+        loadCachedLibrary()
+        if !tracks.isEmpty { scanMessage = "\(tracks.count) brani dalla libreria salvata" }
     }
 
     var albums: [Album] {
@@ -184,8 +193,54 @@ final class MusicLibrary: ObservableObject {
                     return $0.title.localizedStandardCompare($1.title) == .orderedAscending
                 }
                 self?.isScanning = false
-                self?.scanMessage = "\(found.count) brani indicizzati"
+                self?.scanMessage = "\(uniqueTracks.count) brani indicizzati"
+                self?.saveCachedLibrary()
             }
+        }
+    }
+
+    private func loadCachedLibrary() {
+        guard let data = try? Data(contentsOf: cacheFile),
+              let snapshot = try? JSONDecoder().decode(LibrarySnapshot.self, from: data) else { return }
+        tracks = snapshot.tracks.map { item in
+            let artwork: NSImage? = item.artworkFile.flatMap { name in
+                NSImage(contentsOf: cacheFolder.appendingPathComponent(name))
+            }
+            return Track(id: item.id, url: URL(fileURLWithPath: item.path),
+                         startTime: item.startTime, endTime: item.endTime,
+                         trackNumber: item.trackNumber, title: item.title,
+                         artist: item.artist, album: item.album, albumArtist: item.albumArtist,
+                         year: item.year, duration: item.duration, artwork: artwork)
+        }
+    }
+
+    private func saveCachedLibrary() {
+        var artworkFiles: [String: String] = [:]
+        let records = tracks.map { track -> CachedTrack in
+            let folderKey = track.url.deletingLastPathComponent().standardizedFileURL.path
+            var artworkName: String?
+            if let image = track.artwork, let tiff = image.tiffRepresentation {
+                if let existing = artworkFiles[folderKey] {
+                    artworkName = existing
+                } else {
+                    let digest = SHA256.hash(data: Data(folderKey.utf8)).map { String(format: "%02x", $0) }.joined()
+                    let name = "cover-\(digest).tiff"
+                    let destination = cacheFolder.appendingPathComponent(name)
+                    if !FileManager.default.fileExists(atPath: destination.path) {
+                        try? tiff.write(to: destination, options: .atomic)
+                    }
+                    artworkFiles[folderKey] = name
+                    artworkName = name
+                }
+            }
+            return CachedTrack(id: track.id, path: track.url.path, startTime: track.startTime,
+                               endTime: track.endTime, trackNumber: track.trackNumber,
+                               title: track.title, artist: track.artist, album: track.album,
+                               albumArtist: track.albumArtist, year: track.year,
+                               duration: track.duration, artworkFile: artworkName)
+        }
+        if let data = try? JSONEncoder().encode(LibrarySnapshot(tracks: records)) {
+            try? data.write(to: cacheFile, options: .atomic)
         }
     }
 
@@ -360,4 +415,24 @@ private func parseEmbeddedFlacCue(_ url: URL) -> [Track] {
                      artist: artist, album: albumTitle, albumArtist: artist,
                      year: nil, duration: end - entry.start, artwork: artwork)
     }
+}
+
+
+private struct LibrarySnapshot: Codable {
+    let tracks: [CachedTrack]
+}
+
+private struct CachedTrack: Codable {
+    let id: String
+    let path: String
+    let startTime: TimeInterval
+    let endTime: TimeInterval?
+    let trackNumber: Int?
+    let title: String
+    let artist: String
+    let album: String
+    let albumArtist: String
+    let year: Int?
+    let duration: TimeInterval
+    let artworkFile: String?
 }
