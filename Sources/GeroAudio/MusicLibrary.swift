@@ -24,7 +24,11 @@ final class MusicLibrary: ObservableObject {
     init() {
         rootURLs = (UserDefaults.standard.stringArray(forKey: rootsKey) ?? []).map(URL.init(fileURLWithPath:))
         loadCachedLibrary()
-        if !tracks.isEmpty { scanMessage = "\(tracks.count) brani dalla libreria salvata" }
+        if !tracks.isEmpty {
+            scanMessage = "\(tracks.count) brani dalla libreria salvata"
+        } else if !rootURLs.isEmpty {
+            refresh()
+        }
     }
 
     var albums: [Album] {
