@@ -9,6 +9,7 @@ struct MainView: View {
     @State private var sort: LibrarySort = .album
     @State private var ascending = true
     @State private var coverSize: CGFloat = 126
+    @AppStorage("GeroAudio.fontScale") private var fontScale: Double = 1.0
     @State private var showOutput = false
     @State private var selectedAlbum: Album?
     @State private var selectedPlaylist: String?
@@ -62,7 +63,7 @@ struct MainView: View {
                     Text("LIBRERIA").font(.system(size: 10, weight: .bold)).foregroundStyle(.cyan)
                     ForEach(LibraryTab.allCases) { item in
                         Button { tab = item; selectedPlaylist = nil } label: {
-                            Label(item.rawValue, systemImage: item == .albums ? "square.grid.2x2" : item == .tracks ? "music.note.list" : "person.2").font(.system(size: 12, weight: tab == item ? .semibold : .regular)).foregroundStyle(tab == item ? .white : .white.opacity(0.65))
+                            Label(item.rawValue, systemImage: item == .albums ? "square.grid.2x2" : item == .tracks ? "music.note.list" : "person.2").font(.system(size: 12 * fontScale, weight: tab == item ? .semibold : .regular)).foregroundStyle(tab == item ? .white : .white.opacity(0.65))
                         }.buttonStyle(.plain)
                     }
                     HStack {
@@ -79,7 +80,7 @@ struct MainView: View {
                             selectedAlbum = nil
                         } label: {
                             Label(name, systemImage: "music.note.list")
-                                .font(.system(size: 11, weight: selectedPlaylist == name ? .semibold : .regular))
+                                .font(.system(size: 11 * fontScale, weight: selectedPlaylist == name ? .semibold : .regular))
                                 .foregroundStyle(selectedPlaylist == name ? .white : .white.opacity(0.68))
                         }.buttonStyle(.plain)
                     }
@@ -92,13 +93,15 @@ struct MainView: View {
                         Spacer()
                         Picker("Ordina", selection: $sort) { ForEach(LibrarySort.allCases) { Text($0.rawValue).tag($0) } }.labelsHidden().frame(width: 100).controlSize(.small)
                         Button { ascending.toggle() } label: { Image(systemName: ascending ? "arrow.up" : "arrow.down") }.buttonStyle(.plain)
-                        if tab == .albums { Slider(value: $coverSize, in: 80...190).frame(width: 90) }
+                        if tab == .albums { Slider(value: $coverSize, in: 80...190).frame(width: 90).help("Dimensione copertine") }
+                        Image(systemName: "textformat.size").font(.system(size: 11)).foregroundStyle(.secondary)
+                        Slider(value: $fontScale, in: 0.8...1.8).frame(width: 90).help("Dimensione caratteri")
                         Button { library.refresh() } label: { Image(systemName: "arrow.clockwise") }.buttonStyle(.plain).help("Aggiorna")
                     }.padding(.horizontal, 20).padding(.vertical, 13)
                     Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
                     Group {
                         if let album = selectedAlbum {
-                            AlbumDetailView(album: album, onPlay: { track in player.play(track, queue: album.tracks) }, onBack: { selectedAlbum = nil })
+                            AlbumDetailView(album: album, fontScale: fontScale, onPlay: { track in player.play(track, queue: album.tracks) }, onBack: { selectedAlbum = nil })
                         } else if library.tracks.isEmpty && !library.isScanning {
                             ContentUnavailableView("La libreria è vuota", systemImage: "music.note.list", description: Text("Aggiungi una cartella con i tuoi file musicali."))
                         } else if tab == .albums {
@@ -108,8 +111,8 @@ struct MainView: View {
                                         Button { selectedAlbum = album } label: {
                                             VStack(alignment: .leading, spacing: 5) {
                                                 artwork(album.artwork, size: coverSize)
-                                                Text(album.title).font(.system(size: 11, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
-                                                Text(album.artist).font(.system(size: 10)).foregroundStyle(.white.opacity(0.58)).lineLimit(1)
+                                                Text(album.title).font(.system(size: 11 * fontScale, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                                                Text(album.artist).font(.system(size: 10 * fontScale)).foregroundStyle(.white.opacity(0.58)).lineLimit(1)
                                             }.frame(width: coverSize, alignment: .leading)
                                         }.buttonStyle(.plain)
                                         .contextMenu {
@@ -150,7 +153,7 @@ struct MainView: View {
                                     HStack(spacing: 12) {
                                         Text(String(format: "%02d", index + 1)).foregroundStyle(.secondary).frame(width: 28)
                                         VStack(alignment: .leading, spacing: 3) {
-                                            Text(track.title).foregroundStyle(.white)
+                                            Text(track.title).font(.system(size: 13 * fontScale)).foregroundStyle(.white)
                                             Text("\(track.artist) · \(track.album)").font(.system(size: 10)).foregroundStyle(.secondary)
                                         }
                                         Spacer()
@@ -179,12 +182,12 @@ struct MainView: View {
             HStack(spacing: 14) {
                 artwork(player.currentTrack?.artwork, size: 48)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(player.currentTrack?.title ?? "Nessun brano in riproduzione").font(.system(size: 11, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
+                    Text(player.currentTrack?.title ?? "Nessun brano in riproduzione").font(.system(size: 11 * fontScale, weight: .semibold)).foregroundStyle(.white).lineLimit(1)
                     Text(player.currentTrack.map { "\($0.artist) · \($0.album)" } ?? "Gero Audio").font(.system(size: 9)).foregroundStyle(.white.opacity(0.55)).lineLimit(1)
                 }.frame(width: 220, alignment: .leading)
                 Spacer()
                 Button { player.previousTrack() } label: { Image(systemName: "backward.end.fill") }.buttonStyle(.plain).help("Traccia precedente")
-                Button { player.togglePlayback() } label: { Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 19)).frame(width: 34, height: 34) }.buttonStyle(.plain)
+                Button { player.togglePlayback() } label: { Image(systemName: player.isPlaying ? "pause.fill" : "play.fill").font(.system(size: 19)).frame(width: 34, height: 34) }.buttonStyle(.plain).keyboardShortcut(.space, modifiers: []).help("Play/Pausa (barra spaziatrice)")
                 Button { player.nextTrack() } label: { Image(systemName: "forward.end.fill") }.buttonStyle(.plain).help("Traccia successiva")
                 Button { player.stop() } label: { Image(systemName: "stop.fill") }.buttonStyle(.plain).help("Stop")
                 Text(time(player.elapsed)).font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
