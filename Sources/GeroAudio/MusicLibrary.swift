@@ -49,6 +49,7 @@ final class MusicLibrary: ObservableObject {
         let extensions = supported
         Task.detached(priority: .utility) { [weak self] in
             var found: [Track] = []
+            var folderArtworkCache: [URL: NSImage] = [:]
             for root in roots {
                 let access = root.startAccessingSecurityScopedResource()
                 defer { if access { root.stopAccessingSecurityScopedResource() } }
@@ -71,6 +72,25 @@ final class MusicLibrary: ObservableObject {
                     var artwork: NSImage?
                     if let item = metadata.first(where: { $0.commonKey == AVMetadataKey.commonKeyArtwork }),
                        let data = item.dataValue { artwork = NSImage(data: data) }
+                    if artwork == nil {
+                        if let cached = folderArtworkCache[folderURL] {
+                            artwork = cached
+                        } else {
+                            let names = ["cover", "folder", "front", "album", "artwork"]
+                            let imageExtensions = ["jpg", "jpeg", "png", "tif", "tiff"]
+                            for name in names {
+                                for ext in imageExtensions {
+                                    let imageURL = folderURL.appendingPathComponent(name).appendingPathExtension(ext)
+                                    if let image = NSImage(contentsOf: imageURL) {
+                                        folderArtworkCache[folderURL] = image
+                                        artwork = image
+                                        break
+                                    }
+                                }
+                                if artwork != nil { break }
+                            }
+                        }
+                    }
                     found.append(Track(id: url, url: url, title: title, artist: artist, album: album,
                                        albumArtist: artist, year: year, duration: duration, artwork: artwork))
                 }
