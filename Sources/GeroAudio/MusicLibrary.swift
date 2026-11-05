@@ -33,6 +33,9 @@ final class MusicLibrary: ObservableObject {
             return Album(title: first.album, artist: first.albumArtist.isEmpty ? first.artist : first.albumArtist,
                          year: first.year, artwork: group.compactMap(\.artwork).first,
                          tracks: group.sorted { left, right in
+                             if let leftNumber = left.trackNumber, let rightNumber = right.trackNumber, leftNumber != rightNumber {
+                                 return leftNumber < rightNumber
+                             }
                              if left.url == right.url && left.startTime != right.startTime { return left.startTime < right.startTime }
                              return left.title.localizedStandardCompare(right.title) == .orderedAscending
                          })
@@ -101,6 +104,7 @@ final class MusicLibrary: ObservableObject {
                           !cueReferencedAudio.contains(url.standardizedFileURL) else { continue }
                     let asset = AVURLAsset(url: url)
                     let metadata = asset.commonMetadata
+                    let allMetadata = asset.metadata + metadata
                     func value(_ key: AVMetadataKey) -> String? {
                         AVMetadataItem.metadataItems(from: metadata, withKey: key, keySpace: .common).first?.stringValue
                     }
@@ -113,24 +117,31 @@ final class MusicLibrary: ObservableObject {
                     let audio = try? AVAudioFile(forReading: url)
                     let duration = audio.map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
                     var artwork: NSImage?
-                    if let item = metadata.first(where: { $0.commonKey == AVMetadataKey.commonKeyArtwork }),
+                    if let item = allMetadata.first(where: { $0.commonKey == AVMetadataKey.commonKeyArtwork }),
                        let data = item.dataValue { artwork = NSImage(data: data) }
                     if artwork == nil {
                         if let cached = folderArtworkCache[folderURL] {
                             artwork = cached
                         } else {
-                            let names = ["cover", "folder", "front", "album", "artwork"]
-                            let imageExtensions = ["jpg", "jpeg", "png", "tif", "tiff"]
-                            for name in names {
-                                for ext in imageExtensions {
-                                    let imageURL = folderURL.appendingPathComponent(name).appendingPathExtension(ext)
-                                    if let image = NSImage(contentsOf: imageURL) {
-                                        folderArtworkCache[folderURL] = image
-                                        artwork = image
-                                        break
-                                    }
+                            let imageExtensions = Set(["jpg", "jpeg", "png", "tif", "tiff", "webp", "bmp"])
+                            let preferredNames = ["cover", "folder", "front", "album", "artwork"]
+                            let candidates = (try? FileManager.default.contentsOfDirectory(at: folderURL,
+                                includingPropertiesForKeys: [.isRegularFileKey], options: [.skipsHiddenFiles])) ?? []
+                            let images = candidates.filter { imageExtensions.contains($0.pathExtension.lowercased()) }
+                            let orderedImages = images.sorted { left, right in
+                                let leftName = left.deletingPathExtension().lastPathComponent.lowercased()
+                                let rightName = right.deletingPathExtension().lastPathComponent.lowercased()
+                                let leftRank = preferredNames.firstIndex(of: leftName) ?? preferredNames.count
+                                let rightRank = preferredNames.firstIndex(of: rightName) ?? preferredNames.count
+                                if leftRank != rightRank { return leftRank < rightRank }
+                                return left.lastPathComponent.localizedStandardCompare(right.lastPathComponent) == .orderedAscending
+                            }
+                            for imageURL in orderedImages {
+                                if let image = NSImage(contentsOf: imageURL) {
+                                    folderArtworkCache[folderURL] = image
+                                    artwork = image
+                                    break
                                 }
-                                if artwork != nil { break }
                             }
                         }
                     }
@@ -140,11 +151,15 @@ final class MusicLibrary: ObservableObject {
             }
             await MainActor.run {
                 // Evita doppioni se la stessa cartella è stata aggiunta da più radici.
-                let uniqueTracks = Dictionary(grouping: found, by: { $0.url.standardizedFileURL })
+                let uniqueTracks = Dictionary(grouping: found, by: { $0.id })
                     .compactMap { $0.value.first }
                 self?.tracks = uniqueTracks.sorted {
                     let albumOrder = $0.album.localizedStandardCompare($1.album)
                     if albumOrder != .orderedSame { return albumOrder == .orderedAscending }
+                    if let leftNumber = $0.trackNumber, let rightNumber = $1.trackNumber, leftNumber != rightNumber {
+                        return leftNumber < rightNumber
+                    }
+                    if $0.url == $1.url && $0.startTime != $1.startTime { return $0.startTime < $1.startTime }
                     return $0.title.localizedStandardCompare($1.title) == .orderedAscending
                 }
                 self?.isScanning = false
@@ -164,7 +179,9 @@ final class MusicLibrary: ObservableObject {
 
 
 private func parseCueFile(_ cueURL: URL) -> [Track] {
-    guard let text = try? String(contentsOf: cueURL, encoding: .utf8) else { return [] }
+    let text = (try? String(contentsOf: cueURL, encoding: .utf8))
+        ?? (try? String(contentsOf: cueURL, encoding: .isoLatin1))
+    guard let text else { return [] }
     let lines = text.components(separatedBy: .newlines)
     var referencedFile: String?
     var albumTitle = cueURL.deletingPathExtension().lastPathComponent
@@ -236,7 +253,7 @@ private func parseCueFile(_ cueURL: URL) -> [Track] {
         let end = index + 1 < entries.count ? entries[index + 1].seconds : totalDuration
         guard end > entry.seconds else { return nil }
         return Track(id: "\(audioURL.path)#cue-\(entry.number)", url: audioURL,
-                     startTime: entry.seconds, endTime: end,
+                     startTime: entry.seconds, endTime: end, trackNumber: entry.number,
                      title: entry.title, artist: entry.artist.isEmpty ? parentArtist : entry.artist,
                      album: albumTitle, albumArtist: parentArtist,
                      year: nil, duration: end - entry.seconds, artwork: artwork)
