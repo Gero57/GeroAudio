@@ -97,14 +97,32 @@ final class MusicLibrary: ObservableObject {
         panel.canChooseDirectories = true
         panel.allowsMultipleSelection = true
         if panel.runModal() == .OK {
-            for url in panel.urls where !rootURLs.contains(url) { rootURLs.append(url) }
+            let existing = Set(rootURLs.map { $0.standardizedFileURL.path })
+            for url in panel.urls {
+                let normalized = url.standardizedFileURL
+                if !existing.contains(normalized.path) {
+                    rootURLs.append(normalized)
+                }
+            }
             persistRoots()
             refresh()
         }
     }
 
+    func removeFolder(_ url: URL) {
+        let path = url.standardizedFileURL.path
+        rootURLs.removeAll { $0.standardizedFileURL.path == path }
+        persistRoots()
+        refresh()
+    }
+
     func refresh() {
-        guard !rootURLs.isEmpty else { tracks = []; return }
+        guard !rootURLs.isEmpty else {
+            tracks = []
+            scanMessage = "Nessuna cartella musicale selezionata"
+            saveCachedLibrary()
+            return
+        }
         isScanning = true
         scanMessage = "Scansione della libreria…"
         let roots = rootURLs
