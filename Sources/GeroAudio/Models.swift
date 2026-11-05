@@ -19,7 +19,7 @@ struct Track: Identifiable, Hashable {
     func hash(into hasher: inout Hasher) { hasher.combine(id) }
 }
 struct Album: Identifiable, Hashable {
-    var id: String { tracks.first?.url.deletingLastPathComponent().standardizedFileURL.path ?? "\(artist)|\(title)" }
+    var id: String { "\(tracks.first?.url.deletingLastPathComponent().standardizedFileURL.path ?? artist)|\(title.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current))" }
     let title: String
     let artist: String
     let year: Int?
