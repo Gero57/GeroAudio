@@ -61,8 +61,10 @@ final class MusicLibrary: ObservableObject {
                         AVMetadataItem.metadataItems(from: metadata, withKey: key, keySpace: .common).first?.stringValue
                     }
                     let title = value(.commonKeyTitle) ?? url.deletingPathExtension().lastPathComponent
-                    let artist = value(.commonKeyArtist) ?? "Artista sconosciuto"
-                    let album = value(.commonKeyAlbumName) ?? "Album sconosciuto"
+                    let folderURL = url.deletingLastPathComponent()
+                    let parentFolderURL = folderURL.deletingLastPathComponent()
+                    let artist = value(.commonKeyArtist) ?? parentFolderURL.lastPathComponent
+                    let album = value(.commonKeyAlbumName) ?? folderURL.lastPathComponent
                     let year = value(.commonKeyCreationDate).flatMap { Int($0.prefix(4)) }
                     let audio = try? AVAudioFile(forReading: url)
                     let duration = audio.map { Double($0.length) / $0.processingFormat.sampleRate } ?? 0
