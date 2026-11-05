@@ -64,7 +64,9 @@ struct MainView: View {
                     }.padding(.horizontal, 20).padding(.vertical, 13)
                     Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
                     Group {
-                        if library.tracks.isEmpty && !library.isScanning {
+                        if let album = selectedAlbum {
+                            AlbumDetailView(album: album, onPlay: { track in player.play(track, queue: album.tracks) }, onBack: { selectedAlbum = nil })
+                        } else if library.tracks.isEmpty && !library.isScanning {
                             ContentUnavailableView("La libreria è vuota", systemImage: "music.note.list", description: Text("Aggiungi una cartella con i tuoi file musicali."))
                         } else if tab == .albums {
                             ScrollView {
@@ -129,10 +131,6 @@ struct MainView: View {
                 Slider(value: $player.volume, in: 0...1).frame(width: 85)
             }.padding(.horizontal, 20).frame(height: 78).background(Color(red: 0.02, green: 0.03, blue: 0.07))
         }.background(Color(red: 0.035, green: 0.05, blue: 0.105)).onAppear { player.refreshOutputs() }
-        .sheet(item: $selectedAlbum) { album in
-            AlbumDetailView(album: album) { track in player.play(track, queue: album.tracks) }
-                .frame(minWidth: 520, minHeight: 480)
-        }
     }
 
     private var outputPanel: some View {
