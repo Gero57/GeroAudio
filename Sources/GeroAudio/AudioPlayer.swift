@@ -30,6 +30,26 @@ final class AudioPlayer: ObservableObject {
         }
     }
 
+    @Published private(set) var eqPresets: [String: [Double]] =
+        UserDefaults.standard.dictionary(forKey: "GeroAudio.eqPresets") as? [String: [Double]] ?? [:]
+
+    func saveEQPreset(named name: String) {
+        let cleanName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !cleanName.isEmpty else { return }
+        eqPresets[cleanName] = eqGains
+        UserDefaults.standard.set(eqPresets, forKey: "GeroAudio.eqPresets")
+    }
+
+    func applyEQPreset(named name: String) {
+        guard let gains = eqPresets[name], gains.count == 10 else { return }
+        eqGains = gains
+        eqEnabled = true
+    }
+
+    func deleteEQPreset(named name: String) {
+        eqPresets.removeValue(forKey: name)
+        UserDefaults.standard.set(eqPresets, forKey: "GeroAudio.eqPresets")
+    }
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
     private let equalizer = AVAudioUnitEQ(numberOfBands: 10)
