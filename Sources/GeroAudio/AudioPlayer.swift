@@ -22,6 +22,9 @@ final class AudioPlayer: ObservableObject {
     private let playerNode = AVAudioPlayerNode()
     private var timer: Timer?
     private var currentFile: AVAudioFile?
+    private var queue: [Track] = []
+    private var currentIndex = 0
+    private var playbackOffset: TimeInterval = 0
 
     init() {
         engine.attach(playerNode)
@@ -43,16 +46,45 @@ final class AudioPlayer: ObservableObject {
         if status == noErr { selectedOutputID = id }
     }
 
-    func play(_ track: Track) {
+    func play(_ track: Track, queue newQueue: [Track]? = nil) {
+        if let newQueue, !newQueue.isEmpty {
+            queue = newQueue
+            currentIndex = queue.firstIndex(of: track) ?? 0
+        } else {
+            queue = [track]
+            currentIndex = 0
+        }
+        startCurrentTrack(at: 0)
+    }
+
+    private func startCurrentTrack(at position: TimeInterval) {
+        guard queue.indices.contains(currentIndex) else { return }
+        let track = queue[currentIndex]
         do {
             playerNode.stop()
+            timer?.invalidate()
             let file = try AVAudioFile(forReading: track.url)
             currentFile = file
             currentTrack = track
-            elapsed = 0
+            let safePosition = min(max(0, position), max(0, track.duration))
+            playbackOffset = safePosition
+            elapsed = safePosition
             if !engine.isRunning { try engine.start() }
-            playerNode.scheduleFile(file, at: nil) { [weak self] in
-                Task { @MainActor in self?.isPlaying = false; self?.timer?.invalidate() }
+            let startFrame = AVAudioFramePosition(safePosition * file.processingFormat.sampleRate)
+            let remainingFrames = max(0, file.length - startFrame)
+            guard remainingFrames > 0 else {
+                if !nextTrack() { isPlaying = false }
+                return
+            }
+            let frameCount = AVAudioFrameCount(min(Int64(UInt32.max), remainingFrames))
+            playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
+                Task { @MainActor in
+                    guard let self else { return }
+                    if !self.nextTrack() {
+                        self.isPlaying = false
+                        self.timer?.invalidate()
+                    }
+                }
             }
             playerNode.play()
             isPlaying = true
@@ -61,6 +93,37 @@ final class AudioPlayer: ObservableObject {
             isPlaying = false
             print("GeroAudio playback error: \(error)")
         }
+    }
+
+    @discardableResult
+    func nextTrack() -> Bool {
+        guard currentIndex + 1 < queue.count else { return false }
+        currentIndex += 1
+        startCurrentTrack(at: 0)
+        return true
+    }
+
+    @discardableResult
+    func previousTrack() -> Bool {
+        if elapsed > 3 {
+            seek(to: 0)
+            return true
+        }
+        guard currentIndex > 0 else {
+            seek(to: 0)
+            return true
+        }
+        currentIndex -= 1
+        startCurrentTrack(at: 0)
+        return true
+    }
+
+    func seek(to position: TimeInterval) {
+        guard currentFile != nil, currentTrack != nil else { return }
+        let wasPlaying = isPlaying
+        playerNode.stop()
+        startCurrentTrack(at: position)
+        if !wasPlaying { pause() }
     }
 
     func togglePlayback() {
@@ -87,6 +150,7 @@ final class AudioPlayer: ObservableObject {
         playerNode.stop()
         isPlaying = false
         elapsed = 0
+        playbackOffset = 0
         timer?.invalidate()
     }
 
@@ -95,13 +159,8 @@ final class AudioPlayer: ObservableObject {
         timer = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 guard let self, self.isPlaying, let nodeTime = self.playerNode.lastRenderTime,
-                      let playerTime = self.playerNode.playerTime(forNodeTime: nodeTime),
-                      let file = self.currentFile else { return }
-                self.elapsed = Double(playerTime.sampleTime) / playerTime.sampleRate
-                if self.elapsed >= Double(file.length) / file.processingFormat.sampleRate {
-                    self.isPlaying = false
-                    self.timer?.invalidate()
-                }
+                      let playerTime = self.playerNode.playerTime(forNodeTime: nodeTime) else { return }
+                self.elapsed = self.playbackOffset + Double(playerTime.sampleTime) / playerTime.sampleRate
             }
         }
     }
