@@ -25,6 +25,7 @@ final class AudioPlayer: ObservableObject {
     private var queue: [Track] = []
     private var currentIndex = 0
     private var playbackOffset: TimeInterval = 0
+    private var playbackGeneration: UInt64 = 0
 
     init() {
         engine.attach(playerNode)
@@ -60,6 +61,8 @@ final class AudioPlayer: ObservableObject {
     private func startCurrentTrack(at position: TimeInterval) {
         guard queue.indices.contains(currentIndex) else { return }
         let track = queue[currentIndex]
+        playbackGeneration &+= 1
+        let generation = playbackGeneration
         do {
             playerNode.stop()
             timer?.invalidate()
@@ -79,7 +82,7 @@ final class AudioPlayer: ObservableObject {
             let frameCount = AVAudioFrameCount(min(Int64(UInt32.max), remainingFrames))
             playerNode.scheduleSegment(file, startingFrame: startFrame, frameCount: frameCount, at: nil) { [weak self] in
                 Task { @MainActor in
-                    guard let self else { return }
+                    guard let self, self.playbackGeneration == generation else { return }
                     if !self.nextTrack() {
                         self.isPlaying = false
                         self.timer?.invalidate()
@@ -147,6 +150,7 @@ final class AudioPlayer: ObservableObject {
     }
 
     func stop() {
+        playbackGeneration &+= 1
         playerNode.stop()
         isPlaying = false
         elapsed = 0
