@@ -16,7 +16,7 @@ final class AudioPlayer: ObservableObject {
     @Published private(set) var elapsed: TimeInterval = 0
     @Published private(set) var outputs: [AudioOutput] = []
     @Published var selectedOutputID: AudioDeviceID?
-    @Published var volume: Double = 0.85 { didSet { playerNode.volume = Float(volume) } }
+    @Published var volume: Double = UserDefaults.standard.object(forKey: "GeroAudio.volume") as? Double ?? 0.0 { didSet { playerNode.volume = Float(volume); UserDefaults.standard.set(volume, forKey: "GeroAudio.volume") } }
 
     private let engine = AVAudioEngine()
     private let playerNode = AVAudioPlayerNode()
@@ -30,6 +30,7 @@ final class AudioPlayer: ObservableObject {
     init() {
         engine.attach(playerNode)
         engine.connect(playerNode, to: engine.mainMixerNode, format: nil)
+        playerNode.volume = Float(volume)
         refreshOutputs()
     }
 
@@ -73,8 +74,10 @@ final class AudioPlayer: ObservableObject {
             playbackOffset = safePosition
             elapsed = safePosition
             if !engine.isRunning { try engine.start() }
-            let startFrame = AVAudioFramePosition(safePosition * file.processingFormat.sampleRate)
-            let remainingFrames = max(0, file.length - startFrame)
+            let startFrame = AVAudioFramePosition((track.startTime + safePosition) * file.processingFormat.sampleRate)
+            let segmentEnd = min(Double(file.length) / file.processingFormat.sampleRate, track.endTime ?? (Double(file.length) / file.processingFormat.sampleRate))
+            let endFrame = AVAudioFramePosition(segmentEnd * file.processingFormat.sampleRate)
+            let remainingFrames = max(0, endFrame - startFrame)
             guard remainingFrames > 0 else {
                 if !nextTrack() { isPlaying = false }
                 return
