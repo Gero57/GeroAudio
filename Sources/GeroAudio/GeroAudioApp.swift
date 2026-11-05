@@ -4,7 +4,6 @@ import SwiftUI
 struct GeroAudioApp: App {
     @StateObject private var library = MusicLibrary()
     @StateObject private var player = AudioPlayer()
-    @NSApplicationDelegateAdaptor(GeroAudioAppDelegate.self) private var appDelegate
     var body: some Scene {
         WindowGroup {
             MainView()
