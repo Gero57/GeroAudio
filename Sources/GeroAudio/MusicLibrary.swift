@@ -10,6 +10,7 @@ final class MusicLibrary: ObservableObject {
     @Published var isScanning = false
     @Published var scanMessage = "Scegli una cartella musicale per iniziare"
     private let supported = Set(["flac", "wav", "wave", "aif", "aiff", "mp3", "m4a", "aac", "caf"])
+    @Published private(set) var playlists: [String: [String]] = UserDefaults.standard.dictionary(forKey: "GeroAudio.playlists") as? [String: [String]] ?? [:]
     private let rootsKey = "GeroAudio.libraryRoots"
 
     init() {
@@ -33,6 +34,26 @@ final class MusicLibrary: ObservableObject {
                          year: first.year, artwork: group.compactMap(\.artwork).first,
                          tracks: group.sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending })
         }
+    }
+
+    func createPlaylist(named name: String) {
+        let clean = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !clean.isEmpty, playlists[clean] == nil else { return }
+        playlists[clean] = []
+        persistPlaylists()
+    }
+
+    func addAlbum(_ album: Album, to playlist: String) {
+        guard playlists[playlist] != nil else { return }
+        if playlists[playlist]?.contains(album.id) == false {
+            playlists[playlist, default: []].append(album.id)
+            persistPlaylists()
+        }
+    }
+
+    func removeAlbum(_ album: Album, from playlist: String) {
+        playlists[playlist]?.removeAll { $0 == album.id }
+        persistPlaylists()
     }
 
     func chooseFolder() {
@@ -127,6 +148,10 @@ final class MusicLibrary: ObservableObject {
                 self?.scanMessage = "\(found.count) brani indicizzati"
             }
         }
+    }
+
+    private func persistPlaylists() {
+        UserDefaults.standard.set(playlists, forKey: "GeroAudio.playlists")
     }
 
     private func persistRoots() {
