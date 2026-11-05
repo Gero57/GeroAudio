@@ -11,6 +11,9 @@ struct MainView: View {
     @State private var coverSize: CGFloat = 126
     @State private var showOutput = false
     @State private var selectedAlbum: Album?
+    @State private var selectedPlaylist: String?
+    @State private var showPlaylistAlert = false
+    @State private var newPlaylistName = ""
 
     private var visibleTracks: [Track] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -27,7 +30,11 @@ struct MainView: View {
     }
     private var visibleAlbums: [Album] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines)
-        return library.albums.filter { q.isEmpty || $0.title.localizedCaseInsensitiveContains(q) || $0.artist.localizedCaseInsensitiveContains(q) }
+        return library.albums.filter { album in
+            let matchesQuery = q.isEmpty || album.title.localizedCaseInsensitiveContains(q) || album.artist.localizedCaseInsensitiveContains(q)
+            let matchesPlaylist = selectedPlaylist == nil || library.playlists[selectedPlaylist!]?.contains(album.id) == true
+            return matchesQuery && matchesPlaylist
+        }
             .sorted { ascending ? $0.title.localizedStandardCompare($1.title) == .orderedAscending : $0.title.localizedStandardCompare($1.title) == .orderedDescending }
     }
 
@@ -46,8 +53,26 @@ struct MainView: View {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("LIBRERIA").font(.system(size: 10, weight: .bold)).foregroundStyle(.cyan)
                     ForEach(LibraryTab.allCases) { item in
-                        Button { tab = item } label: {
+                        Button { tab = item; selectedPlaylist = nil } label: {
                             Label(item.rawValue, systemImage: item == .albums ? "square.grid.2x2" : item == .tracks ? "music.note.list" : "person.2").font(.system(size: 12, weight: tab == item ? .semibold : .regular)).foregroundStyle(tab == item ? .white : .white.opacity(0.65))
+                        }.buttonStyle(.plain)
+                    }
+                    HStack {
+                        Text("PLAYLIST").font(.system(size: 10, weight: .bold)).foregroundStyle(.cyan)
+                        Spacer()
+                        Button { newPlaylistName = ""; showPlaylistAlert = true } label: {
+                            Image(systemName: "plus").font(.system(size: 11, weight: .bold))
+                        }.buttonStyle(.plain).help("Crea playlist")
+                    }.padding(.top, 10)
+                    ForEach(library.playlists.keys.sorted(), id: \.self) { name in
+                        Button {
+                            selectedPlaylist = name
+                            tab = .albums
+                            selectedAlbum = nil
+                        } label: {
+                            Label(name, systemImage: "music.note.list")
+                                .font(.system(size: 11, weight: selectedPlaylist == name ? .semibold : .regular))
+                                .foregroundStyle(selectedPlaylist == name ? .white : .white.opacity(0.68))
                         }.buttonStyle(.plain)
                     }
                     Spacer()
@@ -79,6 +104,18 @@ struct MainView: View {
                                                 Text(album.artist).font(.system(size: 10)).foregroundStyle(.white.opacity(0.58)).lineLimit(1)
                                             }.frame(width: coverSize, alignment: .leading)
                                         }.buttonStyle(.plain)
+                                        .contextMenu {
+                                            Menu("Aggiungi alla playlist") {
+                                                ForEach(library.playlists.keys.sorted(), id: \.self) { name in
+                                                    Button(name) { library.addAlbum(album, to: name) }
+                                                }
+                                            }
+                                            if let selectedPlaylist {
+                                                Button("Rimuovi da questa playlist", role: .destructive) {
+                                                    library.removeAlbum(album, from: selectedPlaylist)
+                                                }
+                                            }
+                                        }
                                     }
                                 }.padding(22)
                             }
@@ -130,7 +167,15 @@ struct MainView: View {
                 Text(player.currentTrack.map { time(max(0, $0.duration - player.elapsed)) } ?? "0:00").font(.system(size: 9, design: .monospaced)).foregroundStyle(.secondary)
                 Slider(value: $player.volume, in: 0...1).frame(width: 85)
             }.padding(.horizontal, 20).frame(height: 78).background(Color(red: 0.02, green: 0.03, blue: 0.07))
-        }.background(Color(red: 0.035, green: 0.05, blue: 0.105)).onAppear { player.refreshOutputs() }
+        }.background(Color(red: 0.035, green: 0.05, blue: 0.105))
+        .onAppear { player.refreshOutputs() }
+        .alert("Nuova playlist", isPresented: $showPlaylistAlert) {
+            TextField("Nome playlist", text: $newPlaylistName)
+            Button("Annulla", role: .cancel) {}
+            Button("Crea") { library.createPlaylist(named: newPlaylistName) }
+        } message: {
+            Text("Dai un nome alla tua playlist.")
+        }
     }
 
     private var outputPanel: some View {
