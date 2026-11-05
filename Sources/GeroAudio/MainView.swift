@@ -102,7 +102,7 @@ struct MainView: View {
                     Rectangle().fill(.white.opacity(0.08)).frame(height: 1)
                     Group {
                         if let album = selectedAlbum {
-                            AlbumDetailView(album: album, fontScale: fontScale, onPlay: { track in player.play(track, queue: album.tracks) }, onBack: { selectedAlbum = nil })
+                            AlbumDetailView(album: album, fontScale: fontScale, currentTrackID: player.currentTrack?.id, isPlaying: player.isPlaying, onPlay: { track in player.play(track, queue: album.tracks) }, onBack: { selectedAlbum = nil })
                         } else if library.tracks.isEmpty && !library.isScanning {
                             ContentUnavailableView("La libreria è vuota", systemImage: "music.note.list", description: Text("Aggiungi una cartella con i tuoi file musicali."))
                         } else if tab == .albums {
