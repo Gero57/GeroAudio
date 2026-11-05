@@ -62,8 +62,19 @@ final class MusicLibrary: ObservableObject {
                 let access = root.startAccessingSecurityScopedResource()
                 defer { if access { root.stopAccessingSecurityScopedResource() } }
                 guard let enumerator = FileManager.default.enumerator(at: root, includingPropertiesForKeys: [.isRegularFileKey, .isHiddenKey], options: [.skipsHiddenFiles, .skipsPackageDescendants]) else { continue }
-                for case let url as URL in enumerator {
-                    guard extensions.contains(url.pathExtension.lowercased()) else { continue }
+                let fileURLs = enumerator.compactMap { $0 as? URL }
+                let cueFiles = fileURLs.filter { $0.pathExtension.lowercased() == "cue" }
+                var cueReferencedAudio = Set<URL>()
+                for cueURL in cueFiles {
+                    let cueTracks = parseCueFile(cueURL)
+                    if !cueTracks.isEmpty {
+                        cueReferencedAudio.formUnion(cueTracks.map { $0.url.standardizedFileURL })
+                        found.append(contentsOf: cueTracks)
+                    }
+                }
+                for url in fileURLs {
+                    guard extensions.contains(url.pathExtension.lowercased()),
+                          !cueReferencedAudio.contains(url.standardizedFileURL) else { continue }
                     let asset = AVURLAsset(url: url)
                     let metadata = asset.commonMetadata
                     func value(_ key: AVMetadataKey) -> String? {
@@ -99,7 +110,7 @@ final class MusicLibrary: ObservableObject {
                             }
                         }
                     }
-                    found.append(Track(id: url, url: url, title: title, artist: artist, album: album,
+                    found.append(Track(id: url.path, url: url, title: title, artist: artist, album: album,
                                        albumArtist: artist, year: year, duration: duration, artwork: artwork))
                 }
             }
@@ -120,5 +131,86 @@ final class MusicLibrary: ObservableObject {
 
     private func persistRoots() {
         UserDefaults.standard.set(rootURLs.map(\.path), forKey: rootsKey)
+    }
+}
+
+
+private func parseCueFile(_ cueURL: URL) -> [Track] {
+    guard let text = try? String(contentsOf: cueURL, encoding: .utf8) else { return [] }
+    let lines = text.components(separatedBy: .newlines)
+    var referencedFile: String?
+    var albumTitle = cueURL.deletingPathExtension().lastPathComponent
+    var albumArtist = cueURL.deletingLastPathComponent().deletingLastPathComponent().lastPathComponent
+    var entries: [(number: Int, title: String, artist: String, seconds: TimeInterval)] = []
+    var currentNumber: Int?
+    var currentTitle: String?
+    var currentArtist: String?
+    var currentSeconds: TimeInterval?
+
+    func quotedValue(_ line: String) -> String? {
+        guard let first = line.firstIndex(of: "\""),
+              let last = line[line.index(after: first)...].firstIndex(of: "\"") else { return nil }
+        return String(line[line.index(after: first)..<last])
+    }
+    func cueTime(_ value: String) -> TimeInterval? {
+        let parts = value.split(separator: ":").compactMap { Double($0) }
+        guard parts.count == 3 else { return nil }
+        return parts[0] * 60 + parts[1] + parts[2] / 75.0
+    }
+    func finishEntry() {
+        if let number = currentNumber, let title = currentTitle, let seconds = currentSeconds {
+            entries.append((number, title, currentArtist ?? albumArtist, seconds))
+        }
+        currentNumber = nil
+        currentTitle = nil
+        currentArtist = nil
+        currentSeconds = nil
+    }
+
+    for rawLine in lines {
+        let line = rawLine.trimmingCharacters(in: .whitespacesAndNewlines)
+        let upper = line.uppercased()
+        if upper.hasPrefix("FILE ") {
+            referencedFile = quotedValue(line) ?? line.split(separator: " ").dropFirst().first.map(String.init)
+        } else if upper.hasPrefix("TRACK ") {
+            finishEntry()
+            currentNumber = Int(line.split(whereSeparator: { $0 == " " || $0 == "\t" }).dropFirst().first ?? "")
+        } else if upper.hasPrefix("TITLE ") {
+            let value = quotedValue(line)
+            if currentNumber == nil, let value { albumTitle = value }
+            else if let value { currentTitle = value }
+        } else if upper.hasPrefix("PERFORMER ") {
+            let value = quotedValue(line)
+            if currentNumber == nil, let value { albumArtist = value }
+            else if let value { currentArtist = value }
+        } else if upper.hasPrefix("INDEX 01 "), let value = line.split(separator: " ").last {
+            currentSeconds = cueTime(String(value))
+        }
+    }
+    finishEntry()
+    guard let filename = referencedFile, !entries.isEmpty else { return [] }
+    let audioURL = cueURL.deletingLastPathComponent().appendingPathComponent(filename).standardizedFileURL
+    guard let audio = try? AVAudioFile(forReading: audioURL) else { return [] }
+    let totalDuration = Double(audio.length) / audio.processingFormat.sampleRate
+    let folderURL = audioURL.deletingLastPathComponent()
+    let parentArtist = albumArtist.isEmpty ? folderURL.deletingLastPathComponent().lastPathComponent : albumArtist
+    var artwork: NSImage?
+    for name in ["cover", "folder", "front", "album", "artwork"] {
+        for ext in ["jpg", "jpeg", "png", "tif", "tiff"] {
+            if let image = NSImage(contentsOf: folderURL.appendingPathComponent(name).appendingPathExtension(ext)) {
+                artwork = image
+                break
+            }
+        }
+        if artwork != nil { break }
+    }
+    return entries.enumerated().compactMap { index, entry in
+        let end = index + 1 < entries.count ? entries[index + 1].seconds : totalDuration
+        guard end > entry.seconds else { return nil }
+        return Track(id: "\(audioURL.path)#cue-\(entry.number)", url: audioURL,
+                     startTime: entry.seconds, endTime: end,
+                     title: entry.title, artist: entry.artist.isEmpty ? parentArtist : entry.artist,
+                     album: albumTitle, albumArtist: parentArtist,
+                     year: nil, duration: end - entry.seconds, artwork: artwork)
     }
 }
