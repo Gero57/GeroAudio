@@ -326,13 +326,11 @@ private struct EqualizerWindowView: View {
                             .font(.system(size: 10, design: .monospaced))
                             .foregroundStyle(player.eqGains[index] == 0 ? Color.secondary : Color.cyan)
                             .frame(height: 15)
-                        Slider(value: Binding(
+                        VerticalEQSlider(value: Binding(
                             get: { player.eqGains[index] },
                             set: { player.setEQGain($0, for: index); selectedPreset = "" }
-                        ), in: -12...12, step: 1)
-                        .rotationEffect(.degrees(-90))
-                        .frame(width: 130, height: 24)
-                        .frame(width: 28, height: 130)
+                        ))
+                        .frame(width: 34, height: 150)
                         Text(labels[index]).font(.system(size: 10, weight: .medium)).foregroundStyle(.white.opacity(0.8))
                     }
                     .frame(maxWidth: .infinity)
@@ -384,6 +382,66 @@ private struct EqualizerWindowView: View {
             }
         } message: {
             Text("Salva la regolazione attuale per richiamarla in qualsiasi momento.")
+        }
+    }
+}
+
+
+private struct VerticalEQSlider: View {
+    @Binding var value: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            let height = geometry.size.height - 16
+            let centerY = height / 2
+            let clamped = min(12, max(-12, value))
+            let thumbY = 8 + (12 - clamped) / 24 * height
+
+            ZStack(alignment: .top) {
+                Capsule()
+                    .fill(Color.white.opacity(0.16))
+                    .frame(width: 5, height: height)
+                    .position(x: geometry.size.width / 2, y: 8 + centerY)
+
+                Rectangle()
+                    .fill(Color.white.opacity(0.30))
+                    .frame(width: 13, height: 1)
+                    .position(x: geometry.size.width / 2, y: 8 + centerY)
+
+                Capsule()
+                    .fill(Color.cyan)
+                    .frame(width: 5, height: abs(thumbY - (8 + centerY)))
+                    .position(
+                        x: geometry.size.width / 2,
+                        y: (thumbY + 8 + centerY) / 2
+                    )
+
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 15, height: 15)
+                    .overlay(Circle().stroke(Color.cyan.opacity(0.9), lineWidth: 1.5))
+                    .shadow(color: .black.opacity(0.35), radius: 2, y: 1)
+                    .position(x: geometry.size.width / 2, y: thumbY)
+            }
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { gesture in
+                        let y = min(height, max(0, gesture.location.y - 8))
+                        let newValue = 12 - (y / height) * 24
+                        value = (newValue).rounded()
+                    }
+            )
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Livello equalizzatore")
+        .accessibilityValue("\(Int(value)) dB")
+        .accessibilityAdjustableAction { direction in
+            switch direction {
+            case .increment: value = min(12, value + 1)
+            case .decrement: value = max(-12, value - 1)
+            @unknown default: break
+            }
         }
     }
 }
