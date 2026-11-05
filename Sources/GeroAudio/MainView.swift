@@ -11,6 +11,8 @@ struct MainView: View {
     @State private var coverSize: CGFloat = 126
     @AppStorage("GeroAudio.fontScale") private var fontScale: Double = 1.0
     @State private var showOutput = false
+    @State private var showEQ = false
+    private let eqBandLabels = ["31", "62", "125", "250", "500", "1k", "2k", "4k", "8k", "16k"]
     @State private var selectedAlbum: Album?
     @State private var selectedPlaylist: String?
     @State private var showPlaylistAlert = false
@@ -57,6 +59,12 @@ struct MainView: View {
                     TextField("Cerca brani, album, artisti…", text: $query).textFieldStyle(.plain)
                 }.padding(10).background(Color.white.opacity(0.07)).clipShape(Capsule()).frame(maxWidth: 480)
                 Spacer()
+                Button { showEQ.toggle() } label: {
+                    Image(systemName: "slider.vertical.3").font(.system(size: 17))
+                        .foregroundStyle(player.eqEnabled ? Color.cyan : Color.white.opacity(0.85))
+                }.buttonStyle(.plain).help("Equalizzatore").popover(isPresented: $showEQ) {
+                    equalizerPanel.padding(18).frame(width: 540, height: 245)
+                }
                 Button { showOutput.toggle() } label: { Image(systemName: "hifispeaker").font(.system(size: 17)) }.buttonStyle(.plain).popover(isPresented: $showOutput) { outputPanel.padding(16).frame(width: 300) }
             }.padding(.horizontal, 22).frame(height: 62).background(Color(red: 0.11, green: 0.15, blue: 0.25))
             HStack(spacing: 0) {
@@ -232,6 +240,53 @@ struct MainView: View {
         } message: {
             Text("Dai un nome alla tua playlist.")
         }
+    }
+
+    private var equalizerPanel: some View {
+        VStack(spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("GERO AUDIO").font(.system(size: 10, weight: .bold)).foregroundStyle(.cyan)
+                    Text("EQUALIZER · 10 BANDE").font(.system(size: 14, weight: .semibold))
+                }
+                Spacer()
+                Toggle("EQ ON", isOn: $player.eqEnabled).toggleStyle(.switch).labelsHidden()
+                Text(player.eqEnabled ? "ON" : "BYPASS")
+                    .font(.system(size: 9, weight: .bold)).foregroundStyle(player.eqEnabled ? .cyan : .secondary)
+                Button("Reset") { player.resetEQ() }.buttonStyle(.bordered).controlSize(.small)
+            }
+            HStack(alignment: .center, spacing: 7) {
+                ForEach(0..<10, id: \.self) { index in
+                    VStack(spacing: 5) {
+                        Text(String(format: "%+.0f", player.eqGains[index]))
+                            .font(.system(size: 9, design: .monospaced))
+                            .foregroundStyle(player.eqGains[index] == 0 ? .secondary : .cyan)
+                            .frame(height: 13)
+                        Slider(value: Binding(
+                            get: { player.eqGains[index] },
+                            set: { player.setEQGain($0, for: index) }
+                        ), in: -12...12, step: 1)
+                        .rotationEffect(.degrees(-90))
+                        .frame(width: 112, height: 22)
+                        .frame(width: 25, height: 112)
+                        Text(eqBandLabels[index])
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.white.opacity(0.75))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            HStack {
+                Text("−12 dB").font(.system(size: 9)).foregroundStyle(.secondary)
+                Spacer()
+                Text("0 dB").font(.system(size: 9)).foregroundStyle(.secondary)
+                Spacer()
+                Text("+12 dB").font(.system(size: 9)).foregroundStyle(.secondary)
+            }
+        }
+        .foregroundStyle(.white)
+        .padding(4)
+        .preferredColorScheme(.dark)
     }
 
     private var outputPanel: some View {
