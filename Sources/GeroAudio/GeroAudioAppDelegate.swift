@@ -15,7 +15,7 @@ final class GeroAudioAppDelegate: NSObject, NSApplicationDelegate {
             guard NSApp.isActive, !event.isARepeat,
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty else { return event }
             let window = event.window ?? NSApp.keyWindow
-            if let responder = window?.firstResponder, responder is NSTextView || responder is NSTextField { return event }
+            if let editor = window?.firstResponder as? NSTextView, editor.isFieldEditor { return event }
             switch event.keyCode {
             case 49:
                 NotificationCenter.default.post(name: .geroAudioSpacebarPlayback, object: nil)
