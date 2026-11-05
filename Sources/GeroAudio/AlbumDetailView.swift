@@ -3,6 +3,7 @@ import SwiftUI
 struct AlbumDetailView: View {
     let album: Album
     let onPlay: (Track) -> Void
+    @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -15,11 +16,14 @@ struct AlbumDetailView: View {
                     Text("\(album.tracks.count) brani").font(.system(size: 11)).foregroundStyle(.secondary)
                     Button {
                         if let first = album.tracks.first { onPlay(first) }
+                        dismiss()
                     } label: {
                         Label("Riproduci album", systemImage: "play.fill")
                     }.buttonStyle(.borderedProminent).tint(.cyan)
                 }
                 Spacer()
+                Button { dismiss() } label: { Image(systemName: "xmark.circle.fill").font(.system(size: 22)).foregroundStyle(.secondary) }
+                    .buttonStyle(.plain).help("Chiudi album")
             }
             Divider()
             HStack {
@@ -28,7 +32,7 @@ struct AlbumDetailView: View {
                 Text("DURATA").frame(width: 65, alignment: .trailing)
             }.font(.system(size: 10, weight: .bold)).foregroundStyle(.secondary)
             List(Array(album.tracks.enumerated()), id: \.element.id) { index, track in
-                Button { onPlay(track) } label: {
+                Button { onPlay(track); dismiss() } label: {
                     HStack(spacing: 12) {
                         Text(String(format: "%02d", index + 1)).foregroundStyle(.secondary).frame(width: 28)
                         VStack(alignment: .leading, spacing: 3) {
