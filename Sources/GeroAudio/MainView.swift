@@ -196,7 +196,6 @@ struct MainView: View {
                 Slider(value: $player.volume, in: 0...1).frame(width: 85)
             }.padding(.horizontal, 20).frame(height: 78).background(Color(red: 0.02, green: 0.03, blue: 0.07))
         }.background(Color(red: 0.035, green: 0.05, blue: 0.105))
-        .background(SpacebarPlaybackHandler { player.togglePlayback() })
         .onAppear { player.refreshOutputs() }
         .alert("Nuova playlist", isPresented: $showPlaylistAlert) {
             TextField("Nome playlist", text: $newPlaylistName)
@@ -230,49 +229,3 @@ struct MainView: View {
 }
 
 
-private struct SpacebarPlaybackHandler: NSViewRepresentable {
-    let onSpace: () -> Void
-
-    func makeCoordinator() -> Coordinator { Coordinator(onSpace: onSpace) }
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView(frame: .zero)
-        context.coordinator.install()
-        return view
-    }
-
-    func updateNSView(_ nsView: NSView, context: Context) {
-        context.coordinator.onSpace = onSpace
-    }
-
-    static func dismantleNSView(_ nsView: NSView, coordinator: Coordinator) {
-        coordinator.remove()
-    }
-
-    final class Coordinator {
-        var onSpace: () -> Void
-        private var monitor: Any?
-
-        init(onSpace: @escaping () -> Void) { self.onSpace = onSpace }
-
-        func install() {
-            guard monitor == nil else { return }
-            monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-                guard event.keyCode == 49,
-                      event.modifierFlags.intersection([.command, .control, .option]).isEmpty,
-                      let window = event.window ?? NSApp.keyWindow,
-                      window.isKeyWindow else { return event }
-                if let responder = window.firstResponder,
-                   responder is NSTextView || responder is NSTextField {
-                    return event
-                }
-                self?.onSpace()
-                return nil
-            }
-        }
-
-        func remove() {
-            if let monitor { NSEvent.removeMonitor(monitor); self.monitor = nil }
-        }
-    }
-}
