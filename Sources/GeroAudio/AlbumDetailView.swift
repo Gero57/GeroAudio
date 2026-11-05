@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AlbumDetailView: View {
     let album: Album
+    var fontScale: Double = 1.0
     let onPlay: (Track) -> Void
     let onBack: () -> Void
 
@@ -13,7 +14,7 @@ struct AlbumDetailView: View {
         VStack(alignment: .leading, spacing: 0) {
             Button(action: onBack) {
                 Label("Libreria", systemImage: "chevron.left")
-                    .font(.system(size: 11, weight: .medium))
+                    .font(.system(size: 11 * fontScale, weight: .medium))
             }
             .buttonStyle(.plain)
             .foregroundStyle(Color.white.opacity(0.68))
@@ -23,10 +24,10 @@ struct AlbumDetailView: View {
                 cover
                 VStack(alignment: .leading, spacing: 7) {
                     Text(album.title)
-                        .font(.system(size: 27, weight: .medium, design: .rounded))
+                        .font(.system(size: 27 * fontScale, weight: .medium, design: .rounded))
                         .foregroundStyle(.white)
                     Text(album.artist)
-                        .font(.system(size: 13, weight: .medium))
+                        .font(.system(size: 13 * fontScale, weight: .medium))
                         .foregroundStyle(Color.white.opacity(0.78))
                     HStack(spacing: 7) {
                         if let year = album.year {
@@ -37,7 +38,7 @@ struct AlbumDetailView: View {
                         Text("·")
                         Text(totalDuration)
                     }
-                    .font(.system(size: 10))
+                    .font(.system(size: 10 * fontScale))
                     .foregroundStyle(Color.white.opacity(0.60))
                     .padding(.top, 2)
 
@@ -45,7 +46,7 @@ struct AlbumDetailView: View {
                         if let first = album.tracks.first { onPlay(first) }
                     } label: {
                         Label("Riproduci album", systemImage: "play.fill")
-                            .font(.system(size: 11, weight: .semibold))
+                            .font(.system(size: 11 * fontScale, weight: .semibold))
                             .padding(.horizontal, 13)
                             .padding(.vertical, 7)
                     }
@@ -64,7 +65,7 @@ struct AlbumDetailView: View {
                 Text("FORMATO").frame(width: 74, alignment: .trailing)
                 Text("DURATA").frame(width: 62, alignment: .trailing)
             }
-            .font(.system(size: 9, weight: .medium))
+            .font(.system(size: 9 * fontScale, weight: .medium))
             .foregroundStyle(accentBlue.opacity(0.9))
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
@@ -94,7 +95,7 @@ struct AlbumDetailView: View {
                                     .foregroundStyle(Color.white.opacity(0.82))
                                     .monospacedDigit()
                             }
-                            .font(.system(size: 10))
+                            .font(.system(size: 10 * fontScale))
                             .padding(.horizontal, 10)
                             .padding(.vertical, 9)
                             .contentShape(Rectangle())
