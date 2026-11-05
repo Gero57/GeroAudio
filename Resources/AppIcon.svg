@@ -3,6 +3,5 @@
 <rect x="82" y="90" width="860" height="860" rx="190" fill="#777" opacity=".35" filter="url(#shadow)"/>
 <rect x="76" y="70" width="872" height="872" rx="190" fill="url(#silver)"/>
 <circle cx="512" cy="506" r="374" fill="url(#navy)"/>
-<path d="M 760 332 C 708 257 615 224 520 235 C 372 251 264 355 249 492 C 232 650 340 769 486 778 C 616 786 729 706 760 592 C 781 514 748 449 683 423 C 616 397 545 419 507 474 C 470 528 483 592 535 618 C 579 640 638 627 670 592 C 693 568 699 539 692 513" fill="none" stroke="#fff" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M 688 515 C 747 516 802 509 856 495" fill="none" stroke="#fff" stroke-width="27" stroke-linecap="round" stroke-linejoin="round"/>
+<text x="512" y="790" text-anchor="middle" font-family="Snell Roundhand" font-size="790" font-weight="normal" fill="#fff">G</text>
 </svg>
