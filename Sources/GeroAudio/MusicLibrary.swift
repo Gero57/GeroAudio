@@ -57,8 +57,22 @@ final class MusicLibrary: ObservableObject {
         }
     }
 
+    func addTrack(_ track: Track, to playlist: String) {
+        guard playlists[playlist] != nil else { return }
+        if playlists[playlist]?.contains(track.id) == false {
+            playlists[playlist, default: []].append(track.id)
+            persistPlaylists()
+        }
+    }
+
+    func removeTrack(_ track: Track, from playlist: String) {
+        playlists[playlist]?.removeAll { $0 == track.id }
+        persistPlaylists()
+    }
+
     func removeAlbum(_ album: Album, from playlist: String) {
-        playlists[playlist]?.removeAll { $0 == album.id }
+        let trackIDs = Set(album.tracks.map(\.id))
+        playlists[playlist]?.removeAll { $0 == album.id || trackIDs.contains($0) }
         persistPlaylists()
     }
 
